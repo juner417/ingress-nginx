@@ -94,6 +94,7 @@ func (s statusSync) Run(stopCh chan struct{}) {
 
 	// when this instance is the leader we need to enqueue
 	// an item to trigger the update of the Ingress status.
+	klog.V(3).InfoS("*****RUN-status-sync*****")
 	wait.PollUntil(time.Duration(UpdateInterval)*time.Second, func() (bool, error) {
 		s.syncQueue.EnqueueTask(task.GetDummyObject("sync status"))
 		return false, nil
@@ -289,7 +290,7 @@ func (s *statusSync) updateStatus(newIngressPoint []apiv1.LoadBalancerIngress) {
 			klog.V(3).InfoS("skipping update of Ingress (no change)", "namespace", ing.Namespace, "ingress", ing.Name)
 			continue
 		}
-
+		klog.V(3).InfoS("*****updateStatus***** ", "namespace", ing.Namespace, "ingress", ing.Name, "status", ing.Status.LoadBalancer)
 		batch.Queue(runUpdate(ing, newIngressPoint, s.Client))
 	}
 
