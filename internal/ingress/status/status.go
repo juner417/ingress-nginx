@@ -137,10 +137,12 @@ func (s *statusSync) sync(key interface{}) error {
 		return nil
 	}
 
+	klog.V(2).InfoS("*****sync status starting*****")
 	addrs, err := s.runningAddresses()
 	if err != nil {
 		return err
 	}
+	klog.InfoS("*****update addr*****", "address", addrs)
 	s.updateStatus(standardizeLoadBalancerIngresses(addrs))
 
 	return nil
@@ -171,21 +173,32 @@ func nameOrIPToLoadBalancerIngress(nameOrIP string) apiv1.LoadBalancerIngress {
 // runningAddresses returns a list of IP addresses and/or FQDN where the
 // ingress controller is currently running
 func (s *statusSync) runningAddresses() ([]apiv1.LoadBalancerIngress, error) {
+	// --publish-status-address 가 있는 경우
+	//  NOTE. 우리 이슈는 이 config 를 주어줬는데 이 부분이 동작하지 않음...?
 	if s.PublishStatusAddress != "" {
+		// comma seperate substring
 		re := regexp.MustCompile(`,\s*`)
 		multipleAddrs := re.Split(s.PublishStatusAddress, -1)
+		// define channel for LoadBalancerIngress type
 		addrs := make([]apiv1.LoadBalancerIngress, len(multipleAddrs))
 		for i, addr := range multipleAddrs {
+			// nameOrIPToLoadBalancerIngress 함수에서 인자로 받는 addr이 ip 주소 형태의 string 이면(ip 주소형태면)
+			// apiv1.LoadBalancerIngress{IP: nameOrIP}
+			// ip 형태가 아니면(domain)
+			// apiv1.LoadBalancerIngress{Hostname: nameOrIP}
 			addrs[i] = nameOrIPToLoadBalancerIngress(addr)
 		}
 		return addrs, nil
 	}
 
+	// --publish-service 값이 존재하면
+	// []apiv1.LoadBalancerIngress type 채널에 ingress.address(or hostname)를 담아서 return
 	if s.PublishService != "" {
 		return statusAddressFromService(s.PublishService, s.Client)
 	}
 
 	// get information about all the pods running the ingress controller
+	// label selector를 이용해서 ingress pod 목록 가져옴
 	pods, err := s.Client.CoreV1().Pods(k8s.IngressPodDetails.Namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(k8s.IngressPodDetails.Labels).String(),
 	})
@@ -215,6 +228,7 @@ func (s *statusSync) runningAddresses() ([]apiv1.LoadBalancerIngress, error) {
 			continue
 		}
 
+		// pod이 실행중인 node의 ip or name을 가져옴
 		name := k8s.GetNodeIPOrName(s.Client, pod.Spec.NodeName, s.UseNodeInternalIP)
 		if !stringInIngresses(name, addrs) {
 			addrs = append(addrs, nameOrIPToLoadBalancerIngress(name))
@@ -336,6 +350,8 @@ func ingressSliceEqual(lhs, rhs []apiv1.LoadBalancerIngress) bool {
 	return true
 }
 
+// statusAddressFromService 은 --publish-service 로 지정한 config 값에서(namespace/svc)  svc.spec type별로 구분하여
+// []apiv1.LoadBalancerIngress type 채널에 ingress.address(or hostname)를 담아서 return
 func statusAddressFromService(service string, kubeClient clientset.Interface) ([]apiv1.LoadBalancerIngress, error) {
 	ns, name, _ := k8s.ParseNameNS(service)
 	svc, err := kubeClient.CoreV1().Services(ns).Get(context.TODO(), name, metav1.GetOptions{})
@@ -363,17 +379,23 @@ func statusAddressFromService(service string, kubeClient clientset.Interface) ([
 			addrs[i] = apiv1.LoadBalancerIngress{IP: ip}
 		}
 		return addrs, nil
+	// type: loadBalancer일 경우
 	case apiv1.ServiceTypeLoadBalancer:
+		// svc.Status.LoadBalancer.Ingress 슬라이스 갯수 만큼의 channel생성
 		addrs := make([]apiv1.LoadBalancerIngress, len(svc.Status.LoadBalancer.Ingress))
+		// svc.Status.LoadBalancer.Ingress for loop
 		for i, ingress := range svc.Status.LoadBalancer.Ingress {
 			addrs[i] = apiv1.LoadBalancerIngress{}
+			// ingress.Hostname이 있을 경우,
 			if ingress.Hostname != "" {
 				addrs[i].Hostname = ingress.Hostname
 			}
+			// ingress.IP가 있을 경우,
 			if ingress.IP != "" {
 				addrs[i].IP = ingress.IP
 			}
 		}
+		// svc.spec.externalip가 지정되어있을 경우 처리
 		for _, ip := range svc.Spec.ExternalIPs {
 			if !stringInIngresses(ip, addrs) {
 				addrs = append(addrs, apiv1.LoadBalancerIngress{IP: ip})
