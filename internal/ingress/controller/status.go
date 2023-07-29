@@ -93,12 +93,14 @@ func setupLeaderElection(config *leaderElectionConfig) {
 		Host:      hostname,
 	})
 
+	// electid를 가지고 object 생성
 	objectMeta := metav1.ObjectMeta{Namespace: k8s.IngressPodDetails.Namespace, Name: config.ElectionID}
 	resourceLockConfig := resourcelock.ResourceLockConfig{
 		Identity:      k8s.IngressPodDetails.Name,
 		EventRecorder: recorder,
 	}
 
+	// lease lock object 생성
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta:  objectMeta,
 		Client:     config.Client.CoordinationV1(),
@@ -107,6 +109,7 @@ func setupLeaderElection(config *leaderElectionConfig) {
 
 	ttl := 30 * time.Second
 
+	// elector실행(leader election client)
 	elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 		Lock:          lock,
 		LeaseDuration: ttl,

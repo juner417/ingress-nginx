@@ -92,6 +92,7 @@ func (s statusSync) Run(stopCh chan struct{}) {
 	// trigger initial sync
 	s.syncQueue.EnqueueTask(task.GetDummyObject("sync status"))
 
+	// statussync는 leader일때만 이벤트를 enqueue 함 -- 이게 중요...
 	// when this instance is the leader we need to enqueue
 	// an item to trigger the update of the Ingress status.
 	klog.V(3).InfoS("*****RUN-status-sync*****")
