@@ -259,6 +259,7 @@ type NGINXController struct {
 func (n *NGINXController) Start() {
 	klog.InfoS("Starting NGINX Ingress controller")
 
+	// store 실행
 	n.store.Run(n.stopCh)
 
 	// we need to use the defined ingress class to allow multiple leaders
@@ -271,6 +272,8 @@ func (n *NGINXController) Start() {
 	setupLeaderElection(&leaderElectionConfig{
 		Client:     n.cfg.Client,
 		ElectionID: electionID,
+		// leader 일때 syncStatus 동작
+		// master process에서 실행함
 		OnStartedLeading: func(stopCh chan struct{}) {
 			if n.syncStatus != nil {
 				go n.syncStatus.Run(stopCh)
