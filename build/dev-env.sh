@@ -16,6 +16,7 @@
 
 if [ -n "$DEBUG" ]; then
 	set -x
+  export KINDVERBOSE=${KINDVERBOSE:-"3"}
 fi
 
 set -o errexit
@@ -46,7 +47,7 @@ if ! command -v helm &> /dev/null; then
 fi
 
 HELM_VERSION=$(helm version 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+') || true
-if [[ ${HELM_VERSION} < "v3.9.0" ]]; then
+if [[ ${HELM_VERSION} > "v3.9.0" ]]; then
   echo "Please upgrade helm to v3.9.0 or higher"
   exit 1
 fi
@@ -67,7 +68,7 @@ KIND_CLUSTER_NAME="ingress-nginx-dev"
 
 if ! kind get clusters -q | grep -q ${KIND_CLUSTER_NAME}; then
 echo "[dev-env] creating Kubernetes cluster with kind"
-cat <<EOF | kind create cluster --name ${KIND_CLUSTER_NAME} --image "kindest/node:${K8S_VERSION}" --config=-
+cat <<EOF | kind create cluster -v ${KINDVERBOSE} --name ${KIND_CLUSTER_NAME} --image "kindest/node:${K8S_VERSION}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
